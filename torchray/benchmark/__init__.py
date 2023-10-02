@@ -42,10 +42,13 @@ def get_example_data(arch='vgg16', shape=224):
     import requests
     from io import BytesIO
     from PIL import Image
-
+    
     url = 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Arthur_Heyer_-_Dog_and_Cats.jpg/592px-Arthur_Heyer_-_Dog_and_Cats.jpg'
-    response = requests.get(url)
-    img = Image.open(BytesIO(response.content))
+    # response = requests.get(url)
+    
+    os.system(f'wget -nc {url}')
+    img = Image.open('592px-Arthur_Heyer_-_Dog_and_Cats.jpg')
+    # img = Image.open(BytesIO(response.content))
 
     # Pre-process the image and convert into a tensor
     transform = torchvision.transforms.Compose([

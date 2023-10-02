@@ -70,7 +70,8 @@ import torch.optim as optim
 
 from torchray.utils import imsmooth, imsc
 from .common import resize_saliency
-
+import dutils
+import os
 BLUR_PERTURBATION = "blur"
 """Blur-type perturbation for :class:`Perturbation`."""
 
@@ -687,5 +688,6 @@ def extremal_perturbation(model,
             sigma=smooth * min(mask_.shape[2:]),
             padding_mode='constant'
         )
-
+    if os.environ.get('DBG_VIZ_ELP',False) == '1':
+        import ipdb;ipdb.set_trace()
     return mask_, hist

@@ -26,6 +26,7 @@ from torchray.benchmark.models import get_model, get_transform
 from torchray.benchmark.pointing_game import PointingGameBenchmark
 from torchray.utils import imsc, get_device, xmkdir
 import torchray.attribution.extremal_perturbation as elp
+import torchray.attribution.extremal_perturbation_with_scale as elp_with_scale
 
 series = 'attribution_benchmarks'
 series_dir = os.path.join('data', series)
@@ -358,6 +359,44 @@ class ExperimentExecutor():
                         'areas': areas,
                         'energy': energy
                     }
+
+
+                elif self.experiment.method == "extremal_perturbation_with_scale":
+
+                    if self.experiment.dataset == 'voc_2007':
+                        areas = [0.025, 0.05, 0.1, 0.2]
+                    else:
+                        areas = [0.018, 0.025, 0.05, 0.1]
+
+                    if self.experiment.boom:
+                        raise RuntimeError("BOOM!")
+
+                    mask, energy = elp_with_scale.extremal_perturbation(
+                        self.model, x, class_id,
+                        areas=areas,
+                        num_levels=8,
+                        step=7,
+                        sigma=7 * 3,
+                        max_iter=800,
+                        debug=self.debug > 0,
+                        jitter=True,
+                        smooth=0.09,
+                        resize=image_size,
+                        perturbation='blur',
+                        reward_func=elp.simple_reward,
+                        variant=elp.PRESERVE_VARIANT,
+                    )
+
+                    saliency = mask.sum(dim=0, keepdim=True)
+                    point = _saliency_to_point(saliency)
+
+                    info = {
+                        'saliency': saliency,
+                        'mask': mask,
+                        'areas': areas,
+                        'energy': energy
+                    }
+
 
                 else:
                     assert False

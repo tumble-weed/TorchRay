@@ -71,6 +71,8 @@ import torch.optim as optim
 from torchray.utils import imsmooth, imsc
 from .common import resize_saliency
 from .spatial_transformer import get_scaled,compute_grid
+import dutils
+import os
 BLUR_PERTURBATION = "blur"
 """Blur-type perturbation for :class:`Perturbation`."""
 
@@ -577,9 +579,16 @@ def extremal_perturbation(model,
                           lr=learning_rate,
                           momentum=momentum,
                           dampening=momentum)
-    hist = torch.zeros((len(areas), 2, 0))
+                          
+    hist = torch.zeros((len(areas), 3, 0))
     
-    scale = torch.tensor(1.,device=device).float().requires_grad_(True)
+    # scale_ = torch.tensor(-np.log(6),device=device).float().requires_grad_(True)
+    scale_ = torch.tensor(1.,device=device).float().requires_grad_(True)
+    
+    optimizer_scale = optim.SGD([scale_],
+                          lr=0.001,
+                          momentum=momentum,
+                          dampening=momentum)
     for t in range(max_iter):
         pmask.requires_grad_(True)
 
@@ -598,14 +607,17 @@ def extremal_perturbation(model,
             ), dim=0)
         else:
             assert False
-        import ipdb;ipdb.set_trace()
-        x = get_scaled(x,scale)
+        # import ipdb;ipdb.set_trace()
+        x = get_scaled(x, scale_ )
+        scaled_input = get_scaled(input,scale_)
         # Apply jitter to the masked data.
         if jitter and t % 2 == 0:
             x = torch.flip(x, dims=(3,))
 
         # Evaluate the model on the masked data.
-        y = model(x)
+        y = model(torch.cat([x,scaled_input],dim=0))
+        y_scale = y[-1:]
+        y = y[:-1]
 
         # Get reward.
         reward = reward_func(y, target, variant=variant)
@@ -620,9 +632,11 @@ def extremal_perturbation(model,
 
         # Gradient step.
         optimizer.zero_grad()
-        (- energy).backward()
+        optimizer_scale.zero_grad()
+        ( - energy - y_scale[:,target].sum() ).backward()
         optimizer.step()
-
+        optimizer_scale.step()
+        scale_.data.copy_(scale_.data.clip(0.75,4))
         pmask.data = pmask.data.clamp(0, 1)
 
         # Record energy.
@@ -630,7 +644,8 @@ def extremal_perturbation(model,
             (hist,
              torch.cat((
                  reward.detach().cpu().view(-1, 1, 1),
-                 regul.detach().cpu().view(-1, 1, 1)
+                 regul.detach().cpu().view(-1, 1, 1),
+                 scale_.detach().cpu().view(-1, 1, 1)
              ), dim=1)), dim=2)
 
         # Adjust the regulariser/area constraint weight.
@@ -643,10 +658,11 @@ def extremal_perturbation(model,
         if (print_iter is not None and t % print_iter == 0) or debug_this_iter:
             print("[{:04d}/{:04d}]".format(t + 1, max_iter), end="")
             for i, area in enumerate(areas):
-                print(" [area:{:.2f} loss:{:.2f} reg:{:.2f}]".format(
+                print(" [area:{:.2f} loss:{:.2f} reg:{:.2f} scale:{:.2f}]".format(
                     area,
                     hist[i, 0, -1],
-                    hist[i, 1, -1]), end="")
+                    hist[i, 1, -1],
+                    hist[i, 2, -1]), end="")
             print()
 
         if debug_this_iter:
@@ -689,5 +705,6 @@ def extremal_perturbation(model,
             sigma=smooth * min(mask_.shape[2:]),
             padding_mode='constant'
         )
-
+    if os.environ.get('DBG_VIZ_ELP',False) == '1':
+        import ipdb;ipdb.set_trace()
     return mask_, hist

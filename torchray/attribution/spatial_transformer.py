@@ -3,15 +3,18 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 # Define a meshgrid for spatial transformer
-def compute_grid(H, W):
-    grid_y, grid_x = torch.meshgrid(torch.linspace(-1, 1, H), torch.linspace(-1, 1, W))
+def compute_grid(H, W,lim=1):
+    grid_y, grid_x = torch.meshgrid(torch.linspace(-lim, lim, H), torch.linspace(-lim, lim, W))
     grid = torch.stack([grid_x, grid_y], dim=2)
     return grid
 
 def get_scaled(x,s):
-    grid = compute_grid(x.shape[2], x.shape[3])
+    H,W= x.shape[-2:]
+    oH,oW = int(H*s),int(W*s)
+    grid = compute_grid(oH,oW,lim = s.detach())
+    grid = grid.to(x.device)
     # Scale the grid by s
-    grid = grid * s
+    grid = grid * (1/s)
     # Sample the original image tensor using the scaled grid
     resized_x = F.grid_sample(x, grid.unsqueeze(0), mode='bilinear', align_corners=True, padding_mode='zeros')
     return resized_x
